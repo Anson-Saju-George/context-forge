@@ -1,0 +1,86 @@
+{
+  "deployment_profile": "local_dev",
+  "hardware": {
+    "gpu_enabled": false,
+    "gpu_vram_gb": 0,
+    "cpu_ram_gb": 16
+  },
+  "ui": {
+    "show_locked_options": true,
+    "show_experimental_badges": true,
+    "show_debug_panels": true
+  },
+  "routing": {
+    "frontend_base_path": "/rag",
+    "api_base_url": "http://localhost:8000",
+    "api_prefix": "/api",
+    "docs_path": "/api/docs",
+    "openapi_path": "/api/openapi.json",
+    "cors_origins": [
+      "http://localhost:5173",
+      "http://127.0.0.1:5173"
+    ]
+  },
+  "limits": {
+    "max_upload_mb": 20,
+    "max_docs_per_chat": 20,
+    "max_chunks_per_chat": 5000,
+    "free_chats_per_user": 2,
+    "max_chats_per_user": 5,
+    "max_context_tokens": 4096,
+    "max_generation_tokens": 512,
+    "max_top_k": 20
+  },
+  "billing": {
+    "enabled": true,
+    "provider": "razorpay",
+    "free_chat_limit": 2,
+    "paid_chat_limit": 5,
+    "currency": "INR"
+  },
+  "storage": {
+    "base_dir": "data/chats",
+    "separate_user_storage": true,
+    "separate_chat_folders": true
+  },
+  "features": {
+    "ingestion": {
+      "enabled": true,
+      "default": "markdown",
+      "types": {
+        "markdown": true,
+        "mdx": true,
+        "txt": true,
+        "pdf": true,
+        "docx": true
+      }
+    },
+    "retrieval": {
+      "enabled": true,
+      "default": "v1",
+      "strategies": {
+        "v0_similarity": true,
+        "bm25_hierarchical": true,
+        "intent_routing": false,
+        "document_balanced_synthesis": false,
+        "evidence_extraction": false
+      }
+    },
+    "generation": {
+      "enabled": true,
+      "default_provider": "ollama",
+      "default_model": "qwen3:4b-instruct",
+      "ollama_base_url": "http://localhost:11434",
+      "providers": {
+        "ollama": true,
+        "openai_compatible": false
+      }
+    },
+    "debug": {
+      "enabled": true,
+      "trace_viewer": true,
+      "retrieval_inspector": true,
+      "prompt_viewer": true
+    }
+  }
+}
