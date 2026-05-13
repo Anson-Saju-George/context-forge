@@ -250,6 +250,16 @@ function Overlay({
                 x
               </button>
             </div>
+            {!googleClientId && (
+              <div className="mt-2 max-w-xs text-sm text-red-200">
+                Google sign-in is not configured on the backend.
+              </div>
+            )}
+            {googleClientId && !scriptReady && (
+              <div className="mt-2 max-w-xs text-sm text-zinc-300">
+                Loading Google sign-in...
+              </div>
+            )}
             <div ref={googleButtonRef} className="mt-2 flex justify-center" />
           </div>
         </div>

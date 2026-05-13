@@ -28,7 +28,8 @@ Current shipped scope:
 - Google auth gate in production mode
 - Razorpay hourly access flow
 - SQLite-backed user and usage tracking
-- configurable frontend mount path such as `/rag/`
+- frontend mounted at `/context-forge/`
+- backend API mounted at `/context-forge/api/`
 
 ## Core Product Shape
 

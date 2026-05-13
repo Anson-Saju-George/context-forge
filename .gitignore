@@ -13,7 +13,6 @@ dist-ssr
 *.local
 secrets.env
 backend/secrets.env
-backend/.env
 __pycache__/
 *.py[cod]
 *.db

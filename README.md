@@ -83,10 +83,10 @@ npm run dev
 Default frontend URL:
 
 ```text
-http://localhost:5173/rag/
+http://localhost:5173/context-forge/
 ```
 
-The mount path comes from backend config. If `FRONTEND_BASE_PATH=/rag`, then `/rag/` is the valid app route and unrelated routes such as `/admin` should not render the app.
+The app is mounted at `/context-forge/`. Unrelated routes such as `/admin` should not render the app.
 
 ## Configuration
 
@@ -97,7 +97,9 @@ Typical values:
 ```text
 CONFIG_FILE=config.json
 OLLAMA_MODEL_ALLOWLIST=qwen3:4b-instruct
-FRONTEND_BASE_PATH=/rag
+FRONTEND_BASE_PATH=/context-forge
+API_BASE_URL=
+API_PREFIX=/context-forge/api
 STORAGE_BASE_DIR=data/chats
 AUTH_SESSION_SECONDS=3600
 ADMIN_EMAILS=ansonsaju007@gmail.com
@@ -201,21 +203,21 @@ These are gitignored.
 
 Current core endpoints:
 
-- `GET /api/v1/health`
-- `GET /api/v1/config`
-- `GET /api/v1/capabilities`
-- `GET /api/v1/models`
-- `GET /api/v1/rag-versions`
-- `POST /api/v1/auth/google`
-- `GET /api/v1/auth/me`
-- `GET /api/v1/usage/me`
-- `POST /api/v1/payment/order`
-- `POST /api/v1/payment/verify`
-- `GET /api/v1/documents`
-- `POST /api/v1/documents/clear`
-- `POST /api/v1/ingest`
-- `POST /api/v1/retrieve`
-- `POST /api/v1/chat`
+- `GET /context-forge/api/health`
+- `GET /context-forge/api/config`
+- `GET /context-forge/api/capabilities`
+- `GET /context-forge/api/models`
+- `GET /context-forge/api/rag-versions`
+- `POST /context-forge/api/auth/google`
+- `GET /context-forge/api/auth/me`
+- `GET /context-forge/api/usage/me`
+- `POST /context-forge/api/payment/order`
+- `POST /context-forge/api/payment/verify`
+- `GET /context-forge/api/documents`
+- `POST /context-forge/api/documents/clear`
+- `POST /context-forge/api/ingest`
+- `POST /context-forge/api/retrieve`
+- `POST /context-forge/api/chat`
 
 ## Benchmarking
 

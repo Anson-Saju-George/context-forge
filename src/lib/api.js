@@ -1,8 +1,8 @@
 import appConfig from '../../config.json'
 
 const routing = appConfig.routing || {}
-const API_BASE_URL = routing.api_base_url || ''
-const API_PREFIX = routing.api_prefix || '/api/v1'
+const API_BASE_URL = routing.api_base_url || (import.meta.env.DEV ? 'http://localhost:8000' : '')
+const API_PREFIX = routing.api_prefix || '/context-forge/api'
 const AUTH_TOKEN_KEY = 'contextforge_auth_token'
 
 export function getAuthToken() {

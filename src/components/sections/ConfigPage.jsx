@@ -11,7 +11,7 @@ function ConfigPage({ bootstrap }) {
       <Panel title="Deployment profile">
         <dl className="grid gap-3 text-sm">
           <InfoRow label="Profile" value={config?.deployment_profile || 'local_dev'} />
-          <InfoRow label="API prefix" value={routing.api_prefix || '/api/v1'} />
+          <InfoRow label="API prefix" value={routing.api_prefix || '/context-forge/api'} />
           <InfoRow label="Frontend base" value={routing.frontend_base_path || '/'} />
         </dl>
       </Panel>

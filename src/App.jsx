@@ -98,12 +98,14 @@ function App() {
         if (!isMounted) {
           return
         }
+        const message = error.message || 'Backend unavailable'
 
         setBootstrap((current) => ({
           ...current,
           loading: false,
-          error: error.message || 'Backend unavailable',
+          error: message,
         }))
+        setAuthError(message)
         setAuthLoading(false)
       })
 
@@ -183,6 +185,11 @@ function App() {
   const activeRagVersion = getRagVersion(ragVersions, selectedRagVersion)
 
   function enterWorkbench() {
+    if (bootstrap.error) {
+      setAuthError(`Backend unavailable: ${bootstrap.error}`)
+      setShowIntro(true)
+      return
+    }
     if (!authUser) {
       setShowIntro(true)
       return

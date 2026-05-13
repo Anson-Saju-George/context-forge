@@ -11,11 +11,11 @@
     "show_debug_panels": true
   },
   "routing": {
-    "frontend_base_path": "/rag",
-    "api_base_url": "http://localhost:8000",
-    "api_prefix": "/api",
-    "docs_path": "/api/docs",
-    "openapi_path": "/api/openapi.json",
+    "frontend_base_path": "/context-forge",
+    "api_base_url": "",
+    "api_prefix": "/context-forge/api",
+    "docs_path": "/context-forge/api/docs",
+    "openapi_path": "/context-forge/api/openapi.json",
     "cors_origins": [
       "http://localhost:5173",
       "http://127.0.0.1:5173"
