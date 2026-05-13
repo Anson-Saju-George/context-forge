@@ -4,6 +4,7 @@ import hmac
 import json
 import shutil
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -123,6 +124,7 @@ def retrieve_with_version(
 
 
 app_settings = settings()
+generation_slots = threading.BoundedSemaphore(app_settings["max_active_clients"])
 app = FastAPI(
   title=app_settings["app_name"],
   docs_url=app_settings["docs_path"],
@@ -139,6 +141,37 @@ app.add_middleware(
 )
 
 api = app_settings["api_prefix"]
+
+
+def require_vram_capacity() -> None:
+  required_gb = float(app_settings.get("vram_required_gb", 0) or 0)
+  available_gb = float(app_settings.get("vram_available_gb", 0) or 0)
+  if required_gb and available_gb < required_gb:
+    raise HTTPException(
+      status_code=503,
+      detail=f"Model unavailable: requires {required_gb:g}GB VRAM, configured available VRAM is {available_gb:g}GB.",
+    )
+
+
+def require_ollama_model_installed(model: str) -> None:
+  try:
+    installed_models = request_ollama_models()
+  except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+    return
+  if installed_models and model not in installed_models:
+    raise HTTPException(status_code=503, detail=f"Ollama model is not installed: {model}. Run `ollama pull {model}` on the server.")
+
+
+class GenerationSlot:
+  def __enter__(self):
+    require_vram_capacity()
+    if not generation_slots.acquire(blocking=False):
+      raise HTTPException(status_code=429, detail="Model busy: one client is already using generation. Try again shortly.")
+    return self
+
+  def __exit__(self, exc_type, exc_value, traceback):
+    generation_slots.release()
+    return False
 
 
 @app.get(f"{api}/health")
@@ -363,10 +396,17 @@ async def ingest(
   if not files:
     raise HTTPException(status_code=400, detail="No files uploaded.")
 
+  documents = load_json(documents_path(chat_id), [])
+  max_upload_files = int(app_settings.get("max_upload_files", 5) or 5)
+  if len(files) > max_upload_files:
+    raise HTTPException(status_code=400, detail=f"Upload limit exceeded: maximum {max_upload_files} files per upload.")
+  if len(documents) + len(files) > max_upload_files:
+    remaining = max(0, max_upload_files - len(documents))
+    raise HTTPException(status_code=400, detail=f"Document limit exceeded: this workspace allows {max_upload_files} files. Remaining slots: {remaining}.")
+
   upload_root = uploads_dir(chat_id)
   upload_root.mkdir(parents=True, exist_ok=True)
 
-  documents = load_json(documents_path(chat_id), [])
   chunks = load_json(chunks_path(chat_id), [])
   ingested_documents = []
 
@@ -499,14 +539,19 @@ def chat(request: ChatRequest, user: dict | None = Depends(require_entitled_user
   else:
     try:
       model = resolve_ollama_model(model)
-      reasoning_summary, answer = request_ollama(
-        request.message,
-        request.messages,
-        retrieval_context,
-        load_json(documents_path(chat_id), []),
-        model,
-      )
+      require_ollama_model_installed(model)
+      with GenerationSlot():
+        reasoning_summary, answer = request_ollama(
+          request.message,
+          request.messages,
+          retrieval_context,
+          load_json(documents_path(chat_id), []),
+          model,
+        )
       provider = "ollama"
+    except urllib.error.HTTPError as error:
+      error_body = error.read().decode("utf-8", errors="replace")
+      raise HTTPException(status_code=503, detail=f"Ollama request failed: HTTP {error.code} {error.reason}. {error_body}") from error
     except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
       raise HTTPException(status_code=503, detail=f"Ollama request failed: {error}") from error
 

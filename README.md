@@ -103,6 +103,10 @@ API_PREFIX=/context-forge/api
 STORAGE_BASE_DIR=data/chats
 AUTH_SESSION_SECONDS=3600
 ADMIN_EMAILS=ansonsaju007@gmail.com
+MAX_ACTIVE_CLIENTS=1
+MAX_UPLOAD_FILES=5
+VRAM_AVAILABLE_GB=6
+VRAM_REQUIRED_GB=4
 ```
 
 Important notes:
@@ -111,6 +115,9 @@ Important notes:
 - `FRONTEND_BASE_PATH` controls where the app is mounted.
 - `STORAGE_BASE_DIR=data/chats` keeps local document/chat paths short.
 - `AUTH_SESSION_SECONDS=3600` sets the one-hour usage window.
+- `MAX_ACTIVE_CLIENTS=1` allows only one active Ollama generation at a time.
+- `MAX_UPLOAD_FILES=5` limits each workspace to five uploaded documents.
+- `VRAM_AVAILABLE_GB` and `VRAM_REQUIRED_GB` are hardcoded deployment values used to block generation when configured VRAM is insufficient.
 
 Saved config snapshots:
 

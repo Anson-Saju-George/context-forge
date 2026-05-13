@@ -54,6 +54,26 @@ def env_value(name: str) -> str:
   return os.getenv(name, "").strip()
 
 
+def env_int(name: str, default: int) -> int:
+  raw_value = env_value(name)
+  if not raw_value:
+    return default
+  try:
+    return int(raw_value)
+  except ValueError:
+    return default
+
+
+def env_float(name: str, default: float) -> float:
+  raw_value = env_value(name)
+  if not raw_value:
+    return default
+  try:
+    return float(raw_value)
+  except ValueError:
+    return default
+
+
 def apply_env_overrides(config: dict) -> dict:
   routing = config.setdefault("routing", {})
   storage = config.setdefault("storage", {})
@@ -116,6 +136,10 @@ def settings() -> dict:
     "razorpay_key_secret": env_value("RAZORPAY_KEY_SECRET"),
     "razorpay_amount_paise": int(env_value("RAZORPAY_AMOUNT_PAISE") or "2000"),
     "razorpay_currency": env_value("RAZORPAY_CURRENCY") or "INR",
+    "max_upload_files": env_int("MAX_UPLOAD_FILES", 5),
+    "max_active_clients": max(1, env_int("MAX_ACTIVE_CLIENTS", 1)),
+    "vram_available_gb": env_float("VRAM_AVAILABLE_GB", 0),
+    "vram_required_gb": env_float("VRAM_REQUIRED_GB", 0),
   }
 
 
@@ -196,5 +220,12 @@ def resolve_capabilities() -> dict:
       "duration_seconds": app_settings["auth_session_seconds"],
       "amount": app_settings["razorpay_amount_paise"],
       "currency": app_settings["razorpay_currency"],
+    },
+    "scheduler": {
+      "max_upload_files": app_settings["max_upload_files"],
+      "max_active_clients": app_settings["max_active_clients"],
+      "vram_available_gb": app_settings["vram_available_gb"],
+      "vram_required_gb": app_settings["vram_required_gb"],
+      "vram_ready": not app_settings["vram_required_gb"] or app_settings["vram_available_gb"] >= app_settings["vram_required_gb"],
     },
   }

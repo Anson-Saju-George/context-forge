@@ -5,6 +5,7 @@ import { getApiJson, postApiForm, postApiJson } from '../../lib/api'
 
 function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
   const apiCapabilities = bootstrap.capabilities
+  const maxUploadFiles = Number(apiCapabilities?.scheduler?.max_upload_files || 5)
   const defaultModel = apiCapabilities?.generation?.default_model || 'qwen3:4b-instruct'
   const availableModels = bootstrap.models?.ollama?.models ?? []
   const allowedModels = bootstrap.models?.ollama?.allowed_models ?? []
@@ -41,7 +42,14 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
     setSelectedFiles((current) => {
       const seen = new Set(current.map((file) => `${file.name}:${file.size}:${file.lastModified}`))
       const merged = [...current]
+      const remainingSlots = Math.max(0, maxUploadFiles - documents.length - current.length)
+      if (nextFiles.length > remainingSlots) {
+        setUploadError(`Document limit is ${maxUploadFiles} files. You can add ${remainingSlots} more.`)
+      }
       nextFiles.forEach((file) => {
+        if (merged.length >= maxUploadFiles - documents.length) {
+          return
+        }
         const key = `${file.name}:${file.size}:${file.lastModified}`
         if (!seen.has(key)) {
           merged.push(file)
@@ -111,6 +119,10 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
     }
 
     const filesToUpload = [...selectedFiles]
+    if (documents.length + filesToUpload.length > maxUploadFiles) {
+      setUploadError(`Document limit is ${maxUploadFiles} files.`)
+      return
+    }
     const formData = new FormData()
     formData.append('chat_id', 'default')
     filesToUpload.forEach((file) => formData.append('files', file))
@@ -420,6 +432,9 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
                 {uploadError}
               </div>
             )}
+            <div className="text-xs text-zinc-500">
+              File slots: {documents.length + selectedFiles.length}/{maxUploadFiles}
+            </div>
             <div className="flex items-center gap-2">
               <div className="flex min-w-0 flex-1 items-center justify-between rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
                 <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Docs</div>
