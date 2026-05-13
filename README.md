@@ -97,6 +97,7 @@ Typical values:
 ```text
 CONFIG_FILE=config.json
 OLLAMA_MODEL_ALLOWLIST=qwen3:4b-instruct
+OLLAMA_TIMEOUT_SECONDS=300
 FRONTEND_BASE_PATH=/context-forge
 API_BASE_URL=
 API_PREFIX=/context-forge/api
@@ -112,6 +113,7 @@ VRAM_REQUIRED_GB=4
 Important notes:
 
 - `OLLAMA_MODEL_ALLOWLIST` filters the model dropdown. If empty, all available backend-discovered models are shown.
+- `OLLAMA_TIMEOUT_SECONDS=300` gives local generation enough time for RAG-heavy prompts.
 - `FRONTEND_BASE_PATH` controls where the app is mounted.
 - `STORAGE_BASE_DIR=data/chats` keeps local document/chat paths short.
 - `AUTH_SESSION_SECONDS=3600` sets the one-hour usage window.

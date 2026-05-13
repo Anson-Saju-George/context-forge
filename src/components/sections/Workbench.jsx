@@ -213,13 +213,14 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
         },
       ])
     } catch (error) {
-      setChatError(error.message || 'Chat request failed')
+      const message = error.message || 'Chat request failed'
+      setChatError(message)
       setMessages((current) => [
         ...current,
         {
           id: `assistant-error-${Date.now()}`,
           role: 'assistant',
-          content: 'The backend chat request failed. Check that FastAPI is running.',
+          content: message,
           meta: 'error',
         },
       ])
