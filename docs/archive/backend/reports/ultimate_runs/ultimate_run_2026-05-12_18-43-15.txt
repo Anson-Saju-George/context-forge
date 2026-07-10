@@ -1,0 +1,79 @@
+ContextForge Ultimate Runner
+log_file=D:\main-projects\LIVE-ACTIVE\Hybrid-RAG-System\hybrid-rag-system\backend\reports\ultimate_runs\ultimate_run_2026-05-12_18-43-15.txt
+
+Versions
+1. all
+2. v0
+3. v1
+4. v2
+5. v3
+6. v3.1
+Choose versions: all, number, version, or comma-list [all]: [selected] Choose versions: all, number, version, or comma-list: v3.1
+
+Question groups
+1. set   = first five questions
+2. stack = separate sixth question only
+3. all   = first five + sixth
+Choose question group [set]: [selected] Choose question group: stack
+
+Answer mode
+1. deterministic = benchmark synthesis/extraction path
+2. ollama        = force Ollama model generation
+Choose answer mode [ollama]: [selected] Choose answer mode: ollama
+
+Ollama models
+1. backend default
+2. gemma4:e2b
+3. qwen3:4b-instruct
+Choose Ollama model: number, model name, or blank [1]: [selected] Choose Ollama model: number, model name, or blank: 1
+Source chat id [default]: [selected] Source chat id: __missing_menu_smoke__
+Fresh chat prefix [ultimate]: [selected] Fresh chat prefix: ultimate_menu_smoke
+Max answer chars, 0 = full [0]: [selected] Max answer chars, 0 = full: 1
+Max sources shown [8]: [selected] Max sources shown: 1
+
+source_dir=D:\main-projects\LIVE-ACTIVE\Hybrid-RAG-System\hybrid-rag-system\data\users\local\chats\missing_menu_smoke\uploads
+versions=v3.1
+mode=stack
+answer_provider=ollama
+answer_model=backend default
+questions=1 (production_ai_stack)
+
+####################################################################################################
+VERSION v3.1
+####################################################################################################
+Version briefing
+Label: V3.1 Clean Baseline
+Purpose: Final extraction-recall baseline for the current research cycle.
+Retrieval algorithms / behavior:
+- BM25 hierarchical retrieval
+- document-balanced synthesis
+- document-balanced extraction
+- up to 16 extraction chunks
+Ranking algorithms / behavior:
+- MMR plus term diversity
+- concrete mechanism prioritization
+- preserved rerank evidence terms
+Context algorithms / behavior:
+- document-balanced packing
+- parent expansion
+- evidence-first extraction context
+Answering / generation behavior:
+- strict cited extraction/synthesis
+- limitations and production-stack templates
+- Ollama-only model policy
+Expected strengths:
+- warmed synthesis 164-194ms
+- algorithm extraction 579ms
+- best local mechanism recall
+Known limits:
+- cold query about 10s
+- no dense vector retrieval
+- no RRF
+- no cross-encoder
+Implementation files:
+- backend/pipeline/retrieval_v31.py
+- backend/pipeline/generation_v31.py
+- backend/pipeline/ingestion_v31.py
+
+Reingesting corpus
+chat_id=ultimate_menu_smoke_v3_1
