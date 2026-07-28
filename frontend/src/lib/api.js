@@ -1,4 +1,4 @@
-import appConfig from '../../config.json'
+import appConfig from '../../../config.json'
 
 const routing = appConfig.routing || {}
 const API_BASE_URL = routing.api_base_url || (import.meta.env.DEV ? 'http://localhost:8000' : '')

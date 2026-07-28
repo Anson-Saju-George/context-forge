@@ -12,6 +12,9 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 BACKEND_DIR = Path(__file__).resolve().parent
 if str(BACKEND_DIR) not in sys.path:
@@ -213,10 +216,10 @@ def models() -> dict:
     ollama_models = [model for model in installed_models if not allowed_models or model in allowed_models]
     ollama_available = True
   except (OSError, urllib.error.URLError, TimeoutError):
+    # Ollama is unreachable; we can't confirm what's installed, so fall back to the
+    # configured allowlist rather than reporting an empty (and misleading) list.
     ollama_models = allowed_models
     ollama_available = False
-  if allowed_models:
-    ollama_models = [model for model in allowed_models if model in set(ollama_models)] or allowed_models
 
   return {
     "default_provider": generation.get("default_provider", "ollama"),
@@ -580,6 +583,24 @@ def chat(request: ChatRequest, user: dict | None = Depends(require_entitled_user
       "fallback_chat_id": retrieval_stats.get("fallback_chat_id", ""),
     },
   )
+
+
+class SPAStaticFiles(StaticFiles):
+  async def get_response(self, path: str, scope):
+    if path == "api" or path.startswith("api/"):
+      raise StarletteHTTPException(status_code=404)
+    try:
+      return await super().get_response(path, scope)
+    except StarletteHTTPException as exc:
+      if exc.status_code != 404:
+        raise
+      return FileResponse(str(Path(self.directory) / "index.html"))
+
+
+FRONTEND_DIST = BACKEND_DIR.parent / "frontend" / "dist"
+FRONTEND_MOUNT_PATH = app_settings["config"].get("routing", {}).get("frontend_base_path", "/context-forge")
+if FRONTEND_DIST.is_dir():
+  app.mount(FRONTEND_MOUNT_PATH, SPAStaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")
 
 
 if __name__ == "__main__":

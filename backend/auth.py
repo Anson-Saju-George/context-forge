@@ -7,7 +7,7 @@ from typing import Annotated
 
 from fastapi import Header, HTTPException
 
-from config import settings
+from config import auth_enabled, settings
 
 
 def b64encode(payload: bytes) -> str:
@@ -24,11 +24,6 @@ def session_secret() -> bytes:
   if not secret:
     raise HTTPException(status_code=500, detail="Auth secret is not configured.")
   return secret.encode("utf-8")
-
-
-def auth_enabled() -> bool:
-  app_settings = settings()
-  return bool(app_settings.get("secrets_enabled") and app_settings.get("google_client_id"))
 
 
 def payment_enabled() -> bool:

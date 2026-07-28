@@ -82,6 +82,7 @@ def apply_env_overrides(config: dict) -> dict:
   api_base_url = env_value("API_BASE_URL")
   api_prefix = env_value("API_PREFIX")
   storage_base_dir = env_value("STORAGE_BASE_DIR")
+  cors_origins = env_value("CORS_ORIGINS")
 
   if frontend_base_path:
     routing["frontend_base_path"] = frontend_base_path
@@ -91,6 +92,8 @@ def apply_env_overrides(config: dict) -> dict:
     routing["api_prefix"] = api_prefix
   if storage_base_dir:
     storage["base_dir"] = storage_base_dir
+  if cors_origins:
+    routing["cors_origins"] = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
 
   return config
 
@@ -143,6 +146,15 @@ def settings() -> dict:
   }
 
 
+def auth_enabled() -> bool:
+  app_settings = settings()
+  if app_settings.get("app_env") != "local_dev":
+    # Outside local dev, missing/misconfigured secrets must fail closed (require real
+    # Google auth) rather than silently reporting auth as disabled to the frontend.
+    return True
+  return bool(app_settings.get("secrets_enabled") and app_settings.get("google_client_id"))
+
+
 def generation_config() -> dict:
   return settings()["config"].get("features", {}).get("generation", {})
 
@@ -165,9 +177,9 @@ def resolve_capabilities() -> dict:
   features = config.get("features", {})
   generation = features.get("generation", {})
   allowed_models = model_allowlist()
-  auth_enabled = bool(app_settings["secrets_enabled"] and app_settings["google_client_id"])
+  auth_is_enabled = auth_enabled()
   payments_enabled = bool(
-    auth_enabled
+    auth_is_enabled
     and app_settings["razorpay_key_id"]
     and app_settings["razorpay_key_secret_configured"]
   )
@@ -208,8 +220,8 @@ def resolve_capabilities() -> dict:
     },
     "auth": {
       "provider": "google",
-      "enabled": auth_enabled,
-      "google_client_id": app_settings["google_client_id"] if auth_enabled else "",
+      "enabled": auth_is_enabled,
+      "google_client_id": app_settings["google_client_id"] if auth_is_enabled else "",
       "session_seconds": app_settings["auth_session_seconds"],
       "admin_emails_configured": len(app_settings["admin_emails"]),
     },

@@ -42,6 +42,7 @@ FastAPI docs are configured at:
 ### Standalone Frontend
 
 ```powershell
+cd frontend
 npm install
 npm run dev
 ```
@@ -65,6 +66,17 @@ http://localhost:5173/context-forge/
 3. Open `http://localhost:5173/context-forge/`.
 
 In dev mode, the frontend API client falls back to `http://localhost:8000` when `api_base_url` is empty.
+
+## Docker
+
+```powershell
+copy .env.example .env
+docker compose up -d --build
+```
+
+Serves the built frontend and API together at `http://localhost:8000/context-forge/`. The
+container reaches an Ollama instance running on the host via `OLLAMA_BASE_URL=http://host.docker.internal:11434`
+in `.env`.
 
 ## Inference Backend
 
