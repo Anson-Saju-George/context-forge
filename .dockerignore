@@ -6,7 +6,16 @@ dist
 data
 backend/reports
 backend/secrets.env
+backend/secrets.env.example
 backend/.env
+# Runtime API image doesn't need demo docs, benchmark tooling, the Modal deploy
+# script, or the historical per-version generation duplicates (only pipeline/
+# generation.py and retrieval_v*.py are imported at runtime).
+backend/sample
+backend/benchmarks
+backend/ultimate_run.py
+backend/modal_app.py
+backend/pipeline/generation_v*.py
 __pycache__
 *.pyc
 .venv
