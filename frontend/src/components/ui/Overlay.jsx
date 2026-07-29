@@ -11,11 +11,17 @@ function Overlay({
   onLogout,
   onStartPayment,
   onVersionChange,
+  payments,
   paymentError,
   paymentLoading,
   paymentRequired,
   versions,
 }) {
+  // All labels derive from the backend capabilities payload (single source of
+  // truth from env); never hardcode the price or duration here.
+  const payLabel = payments?.amount_label && payments?.duration_label
+    ? `Pay ${payments.amount_label} for ${payments.duration_label}`
+    : 'Pay for access'
   const googleButtonRef = useRef(null)
   const [scriptReady, setScriptReady] = useState(Boolean(window.google?.accounts?.id))
   const [authPromptOpen, setAuthPromptOpen] = useState(false)
@@ -176,7 +182,7 @@ function Overlay({
                     disabled={paymentLoading}
                     className="rounded-md bg-[color:var(--theme-accent)] px-3 py-2 text-sm font-semibold text-zinc-950 hover:brightness-110 disabled:cursor-wait disabled:opacity-60"
                   >
-                    {paymentLoading ? 'Opening payment...' : 'Pay for 1 hour'}
+                    {paymentLoading ? 'Opening payment...' : payLabel}
                   </button>
                   <button
                     type="button"

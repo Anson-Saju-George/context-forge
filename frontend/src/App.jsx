@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import AppShell from './components/layout/AppShell'
 import Overlay from './components/ui/Overlay'
@@ -58,7 +58,10 @@ function App() {
     ragVersions: null,
   })
   const [selectedRagVersion, setSelectedRagVersion] = useState('v3.1')
-  const [showIntro, setShowIntro] = useState(() => window.localStorage.getItem('contextforge_intro_seen') !== 'true')
+  // Story-first: the overlay always shows on load, then auto-advances to the
+  // workbench (see the auto-advance effect). No localStorage skip.
+  const [showIntro, setShowIntro] = useState(true)
+  const autoAdvancedRef = useRef(false)
   const [authUser, setAuthUser] = useState(null)
   const [hasStoredSession, setHasStoredSession] = useState(() => Boolean(getAuthToken()))
   const [authLoading, setAuthLoading] = useState(true)
@@ -96,9 +99,6 @@ function App() {
           ...data,
         })
         setAuthUser(user)
-        if (!authRequired) {
-          setShowIntro(false)
-        }
         setAuthLoading(false)
       })
       .catch((error) => {
@@ -133,6 +133,20 @@ function App() {
   const shouldShowOverlay = !authLoading && (!authUser || showIntro || paymentRequired)
   const shouldShowAppShell = (authLoading && hasStoredSession) || (!authLoading && Boolean(authUser) && !paymentRequired)
 
+  // Once per load: a logged-in, entitled user sees the story overlay for 2s, then
+  // it auto-advances to the workbench. Manual re-opens of the story (via the Story
+  // button) are left alone.
+  useEffect(() => {
+    if (authLoading || !authUser || paymentRequired || !showIntro || autoAdvancedRef.current) {
+      return undefined
+    }
+    const timerId = window.setTimeout(() => {
+      autoAdvancedRef.current = true
+      setShowIntro(false)
+    }, 2000)
+    return () => window.clearTimeout(timerId)
+  }, [authLoading, authUser, paymentRequired, showIntro])
+
   const applyChatList = (data) => {
     setChats(data.chats || [])
     setChatsMeta({
@@ -144,7 +158,9 @@ function App() {
   }
 
   useEffect(() => {
-    if (!authUser || paymentRequired || showIntro) {
+    // Load chats as soon as the user is entitled, in parallel with the story
+    // overlay, so the workbench is ready the moment the overlay auto-advances.
+    if (!authUser || paymentRequired) {
       return undefined
     }
 
@@ -277,7 +293,7 @@ function App() {
       setShowIntro(true)
       return
     }
-    window.localStorage.setItem('contextforge_intro_seen', 'true')
+    autoAdvancedRef.current = true
     setShowIntro(false)
   }
 
@@ -287,12 +303,10 @@ function App() {
       const user = await loginWithGoogleCredential(credential)
       setAuthUser(user)
       setHasStoredSession(true)
-      if (paymentsEnabled && !user.is_admin && !user.paid) {
-        setShowIntro(true)
-      } else {
-        setShowIntro(false)
-        window.localStorage.setItem('contextforge_intro_seen', 'true')
-      }
+      // Show the story overlay after sign-in; entitled users auto-advance via the
+      // 2s timer, payment-required users stay on the overlay.
+      autoAdvancedRef.current = false
+      setShowIntro(true)
     } catch (error) {
       setAuthError(error.message || 'Google login failed')
       setShowIntro(true)
@@ -351,8 +365,8 @@ function App() {
             const user = await verifyPayment(response)
             setAuthUser(user)
             setHasStoredSession(true)
+            autoAdvancedRef.current = true
             setShowIntro(false)
-            window.localStorage.setItem('contextforge_intro_seen', 'true')
           } catch (error) {
             setPaymentError(error.message || 'Payment verification failed')
             setShowIntro(true)
@@ -415,6 +429,7 @@ function App() {
           onGoogleCredential={handleGoogleCredential}
           onLogout={handleLogout}
           onStartPayment={handleStartPayment}
+          payments={bootstrap.capabilities?.payments}
           paymentError={paymentError}
           paymentLoading={paymentLoading}
           paymentRequired={paymentRequired}

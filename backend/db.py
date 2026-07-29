@@ -133,8 +133,9 @@ def ensure_user_entitlement(user: dict, is_admin: bool) -> dict:
 
   entitled_until = int(row["entitled_until"] or 0)
   free_grant_used = bool(row["free_grant_used"])
+  free_trial_enabled = bool(settings().get("free_trial_enabled", True))
 
-  if not free_grant_used:
+  if free_trial_enabled and not free_grant_used:
     entitled_until = now + expires_in
     with connect() as connection:
       connection.execute(

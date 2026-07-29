@@ -21,7 +21,7 @@ BACKEND_DIR = Path(__file__).resolve().parent
 if str(BACKEND_DIR) not in sys.path:
   sys.path.insert(0, str(BACKEND_DIR))
 
-from config import generation_config, resolve_capabilities, settings
+from config import access_label, generation_config, resolve_capabilities, settings
 from auth import auth_enabled, create_session, is_admin_email, local_user, payment_enabled, require_entitled_user, require_user, scoped_chat_id, verify_google_credential, verify_session_token
 from db import (
   append_message,
@@ -371,6 +371,7 @@ def create_payment_order(user: dict = Depends(require_user)) -> PaymentOrderResp
     order_id=order["id"],
     amount=order["amount"],
     currency=order["currency"],
+    description=access_label(app_config),
   )
 
 

@@ -74,6 +74,43 @@ def env_float(name: str, default: float) -> float:
     return default
 
 
+def env_bool(name: str, default: bool) -> bool:
+  raw_value = env_value(name).lower()
+  if not raw_value:
+    return default
+  return raw_value in ("1", "true", "yes", "on")
+
+
+# --- Single source of truth for human-facing access/price labels --------------
+# These derive entirely from the env-configured duration + amount so a value is
+# defined in exactly one place (the env) and formatted once here.
+
+_CURRENCY_SYMBOLS = {"INR": "₹", "USD": "$", "EUR": "€", "GBP": "£"}
+
+
+def format_duration_label(seconds: int) -> str:
+  seconds = int(seconds)
+  if seconds >= 3600 and seconds % 3600 == 0:
+    hours = seconds // 3600
+    return f"{hours} hour" + ("s" if hours > 1 else "")
+  if seconds >= 60 and seconds % 60 == 0:
+    return f"{seconds // 60} min"
+  return f"{seconds} sec"
+
+
+def format_amount_label(amount_paise: int, currency: str) -> str:
+  symbol = _CURRENCY_SYMBOLS.get((currency or "").upper(), (currency or "").upper() + " ")
+  amount = int(amount_paise) / 100
+  text = f"{amount:.2f}".rstrip("0").rstrip(".")
+  return f"{symbol}{text}"
+
+
+def access_label(app_settings: dict) -> str:
+  """One canonical 'what you're buying' string, reused by the payment order
+  description and the frontend button so there is a single source of truth."""
+  return f"{format_duration_label(app_settings['auth_session_seconds'])} ContextForge access"
+
+
 def apply_env_overrides(config: dict) -> dict:
   routing = config.setdefault("routing", {})
   storage = config.setdefault("storage", {})
@@ -146,6 +183,7 @@ def settings() -> dict:
     "max_chats_per_user": max(1, env_int("MAX_CHATS_PER_USER", 2)),
     "max_prompts_per_chat": max(1, env_int("MAX_PROMPTS_PER_CHAT", 10)),
     "chat_retention_days": max(1, env_int("CHAT_RETENTION_DAYS", 30)),
+    "free_trial_enabled": env_bool("FREE_TRIAL_ENABLED", True),
   }
 
 
@@ -235,6 +273,11 @@ def resolve_capabilities() -> dict:
       "duration_seconds": app_settings["auth_session_seconds"],
       "amount": app_settings["razorpay_amount_paise"],
       "currency": app_settings["razorpay_currency"],
+      # Derived labels so the frontend never hardcodes duration/price.
+      "duration_label": format_duration_label(app_settings["auth_session_seconds"]),
+      "amount_label": format_amount_label(app_settings["razorpay_amount_paise"], app_settings["razorpay_currency"]),
+      "access_label": access_label(app_settings),
+      "free_trial_enabled": app_settings["free_trial_enabled"],
     },
     "scheduler": {
       "max_upload_files": app_settings["max_upload_files"],

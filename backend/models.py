@@ -102,7 +102,8 @@ class PaymentOrderResponse(BaseModel):
   amount: int
   currency: str
   name: str = "ContextForge"
-  description: str = "One hour ContextForge access"
+  # Set by the endpoint from config.access_label (single source of truth).
+  description: str = ""
 
 
 class PaymentVerifyRequest(BaseModel):
