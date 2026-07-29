@@ -135,3 +135,32 @@ export async function verifyPayment(payload) {
 export function logout() {
   setAuthToken('')
 }
+
+export async function listChats() {
+  return getApiJson('/chats')
+}
+
+export async function createChat(title = '') {
+  return postApiJson('/chats', { title })
+}
+
+export async function getChat(chatId) {
+  return getApiJson(`/chats/${chatId}`)
+}
+
+export async function renameChat(chatId, title) {
+  return postApiJson(`/chats/${chatId}/rename`, { title })
+}
+
+export async function deleteChat(chatId) {
+  const response = await fetch(buildUrl(`/chats/${chatId}`), {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+
+  if (!response.ok) {
+    throw new Error(await readError(response))
+  }
+
+  return response.json()
+}

@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import AppShell from './components/layout/AppShell'
-import { navItems } from './components/layout/navigation'
 import Overlay from './components/ui/Overlay'
 import {
+  createChat,
   createPaymentOrder,
+  deleteChat,
   getAuthToken,
   getCurrentUser,
+  listChats,
   loadBootstrapData,
   loginWithGoogleCredential,
   logout,
@@ -37,7 +39,15 @@ function isMountedAtBasePath() {
 }
 
 function App() {
-  const [activePage, setActivePage] = useState('workbench')
+  const [view, setView] = useState('chat')
+  const [chats, setChats] = useState([])
+  const [activeChatId, setActiveChatId] = useState('')
+  const [chatsMeta, setChatsMeta] = useState({
+    max_chats_per_user: 2,
+    max_prompts_per_chat: 10,
+    is_admin: false,
+  })
+  const [chatsError, setChatsError] = useState('')
   const [bootstrap, setBootstrap] = useState({
     loading: true,
     error: '',
@@ -57,10 +67,7 @@ function App() {
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [paymentError, setPaymentError] = useState('')
 
-  const pageTitle = useMemo(
-    () => navItems.find((item) => item.id === activePage)?.label ?? 'Workbench',
-    [activePage],
-  )
+  const pageTitle = view === 'config' ? 'Config' : 'Chats'
 
   useEffect(() => {
     let isMounted = true
@@ -125,6 +132,78 @@ function App() {
   )
   const shouldShowOverlay = !authLoading && (!authUser || showIntro || paymentRequired)
   const shouldShowAppShell = (authLoading && hasStoredSession) || (!authLoading && Boolean(authUser) && !paymentRequired)
+
+  const applyChatList = (data) => {
+    setChats(data.chats || [])
+    setChatsMeta({
+      max_chats_per_user: data.max_chats_per_user ?? 2,
+      max_prompts_per_chat: data.max_prompts_per_chat ?? 10,
+      is_admin: Boolean(data.is_admin),
+    })
+    return data
+  }
+
+  useEffect(() => {
+    if (!authUser || paymentRequired || showIntro) {
+      return undefined
+    }
+
+    let isMounted = true
+    listChats()
+      .then((data) => {
+        if (!isMounted) {
+          return
+        }
+        applyChatList(data)
+        setActiveChatId((current) => current || data.chats?.[0]?.id || '')
+      })
+      .catch((error) => {
+        if (isMounted) {
+          setChatsError(error.message || 'Failed to load chats')
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [authUser, paymentRequired, showIntro])
+
+  async function refreshChats(selectId) {
+    const data = applyChatList(await listChats())
+    if (selectId) {
+      setActiveChatId(selectId)
+    }
+    return data
+  }
+
+  async function handleNewChat() {
+    setChatsError('')
+    try {
+      const chat = await createChat('New chat')
+      await refreshChats(chat.id)
+      setView('chat')
+    } catch (error) {
+      setChatsError(error.message || 'Could not create chat')
+    }
+  }
+
+  function handleSelectChat(chatId) {
+    setActiveChatId(chatId)
+    setView('chat')
+  }
+
+  async function handleDeleteChat(chatId) {
+    setChatsError('')
+    try {
+      await deleteChat(chatId)
+      const data = await refreshChats()
+      if (activeChatId === chatId) {
+        setActiveChatId(data.chats?.[0]?.id || '')
+      }
+    } catch (error) {
+      setChatsError(error.message || 'Could not delete chat')
+    }
+  }
 
   useEffect(() => {
     if (!authRequired || !authUser || authUser.is_admin || !authUser.exp) {
@@ -345,11 +424,19 @@ function App() {
       )}
       {shouldShowAppShell && (
         <AppShell
-          activePage={activePage}
+          view={view}
+          onViewChange={setView}
+          chats={chats}
+          activeChatId={activeChatId}
+          chatsMeta={chatsMeta}
+          chatsError={chatsError}
+          onNewChat={handleNewChat}
+          onSelectChat={handleSelectChat}
+          onDeleteChat={handleDeleteChat}
+          onChatMutated={refreshChats}
           activeRagVersion={activeRagVersion}
           bootstrap={bootstrap}
           onLogout={handleLogout}
-          onPageChange={setActivePage}
           pageTitle={pageTitle}
           ragVersions={ragVersions}
           selectedRagVersion={selectedRagVersion}

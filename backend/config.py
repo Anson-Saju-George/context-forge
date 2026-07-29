@@ -143,6 +143,9 @@ def settings() -> dict:
     "max_active_clients": max(1, env_int("MAX_ACTIVE_CLIENTS", 1)),
     "vram_available_gb": env_float("VRAM_AVAILABLE_GB", 0),
     "vram_required_gb": env_float("VRAM_REQUIRED_GB", 0),
+    "max_chats_per_user": max(1, env_int("MAX_CHATS_PER_USER", 2)),
+    "max_prompts_per_chat": max(1, env_int("MAX_PROMPTS_PER_CHAT", 10)),
+    "chat_retention_days": max(1, env_int("CHAT_RETENTION_DAYS", 30)),
   }
 
 

@@ -69,6 +69,14 @@ class ClearDocumentsRequest(BaseModel):
   chat_id: str = "default"
 
 
+class CreateChatRequest(BaseModel):
+  title: str = ""
+
+
+class RenameChatRequest(BaseModel):
+  title: str = ""
+
+
 class GoogleAuthRequest(BaseModel):
   credential: str
 

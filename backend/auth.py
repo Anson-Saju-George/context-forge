@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import Header, HTTPException
 
 from config import auth_enabled, settings
+from db import entitled_until as db_entitled_until
 
 
 def b64encode(payload: bytes) -> str:
@@ -68,24 +69,34 @@ def verify_session_token(token: str) -> dict:
   except (ValueError, json.JSONDecodeError):
     raise HTTPException(status_code=401, detail="Invalid auth session.")
 
-  if not payload.get("is_admin") and int(payload.get("exp", 0)) and int(payload.get("exp", 0)) < int(time.time()):
-    raise HTTPException(status_code=401, detail="Auth session expired.")
+  # exp == 0 means "never expires" and is reserved for admins only. Any non-admin
+  # token must carry a positive, unexpired exp; exp <= 0 for a non-admin is treated
+  # as expired so an overloaded sentinel can never mint a permanent session.
+  if not payload.get("is_admin"):
+    exp = int(payload.get("exp", 0) or 0)
+    if exp <= 0 or exp < int(time.time()):
+      raise HTTPException(status_code=401, detail="Auth session expired.")
   return payload
 
 
 def create_session(user: dict, paid: bool = False, exp_override: int | None = None) -> str:
   now = int(time.time())
-  expires_in = settings().get("auth_session_seconds", 3600)
+  session_seconds = int(settings().get("auth_session_seconds", 3600))
   is_admin = is_admin_email(user.get("email", ""))
-  effective_paid = bool(
-    is_admin
-    or paid
-    or not payment_enabled()
-    or (exp_override is not None and int(exp_override) > now)
-  )
-  expires_at = 0 if is_admin else int(exp_override or 0)
-  if not is_admin and exp_override is None and effective_paid:
-    expires_at = now + int(expires_in)
+
+  if is_admin:
+    expires_at = 0  # admins get a non-expiring session
+    effective_paid = True
+  else:
+    # Identity tokens always have a finite lifetime. If the user has a paid
+    # entitlement window that runs past the plain identity lifetime, honor it so
+    # the token stays valid for the whole paid period.
+    entitlement_exp = int(exp_override or 0)
+    expires_at = max(now + session_seconds, entitlement_exp)
+    # `not payment_enabled()` is an explicit "payments are turned off, everyone who
+    # authenticates gets access" mode - not an accidental fallthrough.
+    effective_paid = bool(paid or entitlement_exp > now or not payment_enabled())
+
   payload = {
     "sub": user["sub"],
     "email": user.get("email", ""),
@@ -112,8 +123,13 @@ def require_entitled_user(authorization: Annotated[str | None, Header()] = None)
   user = require_user(authorization)
   if not payment_enabled() or user.get("is_admin"):
     return user
-  if user.get("paid") and int(user.get("exp", 0)) > int(time.time()):
-    return user
+  # The DB is the source of truth for the entitlement window, not the bearer token.
+  # This makes revocation/refunds take effect immediately and prevents the token's
+  # baked-in exp from drifting away from the real paid window.
+  now = int(time.time())
+  active_until = db_entitled_until(user["sub"])
+  if active_until > now:
+    return {**user, "paid": True, "exp": active_until}
   raise HTTPException(status_code=402, detail="Payment required.")
 
 

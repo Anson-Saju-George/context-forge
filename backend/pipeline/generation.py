@@ -16,6 +16,16 @@ def ollama_base_url() -> str:
   )
 
 
+def ollama_auth_headers() -> dict:
+  # Set when OLLAMA_BASE_URL points at a Modal-hosted deployment with
+  # requires_proxy_auth=True (see backend/modal_app.py); no-op for local Ollama.
+  key = os.getenv("MODAL_PROXY_KEY", "").strip()
+  secret = os.getenv("MODAL_PROXY_SECRET", "").strip()
+  if key and secret:
+    return {"Modal-Key": key, "Modal-Secret": secret}
+  return {}
+
+
 def ollama_timeout_seconds() -> int:
   raw_timeout = os.getenv("OLLAMA_TIMEOUT_SECONDS") or generation_config().get("ollama_timeout_seconds", 120)
   try:
@@ -924,7 +934,7 @@ def request_ollama(
   request = urllib.request.Request(
     f"{ollama_base_url().rstrip('/')}/api/generate",
     data=payload,
-    headers={"Content-Type": "application/json"},
+    headers={"Content-Type": "application/json", **ollama_auth_headers()},
     method="POST",
   )
 
@@ -936,7 +946,10 @@ def request_ollama(
 
 
 def request_ollama_models() -> list[str]:
-  request = urllib.request.Request(f"{ollama_base_url().rstrip('/')}/api/tags")
+  request = urllib.request.Request(
+    f"{ollama_base_url().rstrip('/')}/api/tags",
+    headers=ollama_auth_headers(),
+  )
 
   with urllib.request.urlopen(request, timeout=5) as response:
     data = json.loads(response.read().decode("utf-8"))

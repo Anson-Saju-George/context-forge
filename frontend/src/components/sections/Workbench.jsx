@@ -1,9 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import ChatBubble from '../common/ChatBubble'
 import Panel from '../common/Panel'
-import { getApiJson, postApiForm, postApiJson } from '../../lib/api'
+import { getApiJson, getChat, postApiForm, postApiJson, renameChat } from '../../lib/api'
 
-function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
+function Workbench({
+  activeRagVersion,
+  bootstrap,
+  selectedRagVersion,
+  chatId,
+  maxPromptsPerChat = 10,
+  isAdmin = false,
+  onNewChat,
+  onChatMutated,
+}) {
   const apiCapabilities = bootstrap.capabilities
   const maxUploadFiles = Number(apiCapabilities?.scheduler?.max_upload_files || 5)
   const defaultModel = apiCapabilities?.generation?.default_model || 'qwen3:4b-instruct'
@@ -32,6 +41,9 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const messagesEndRef = useRef(null)
+
+  const promptsUsed = messages.filter((item) => item.role === 'user').length
+  const promptLimitReached = !isAdmin && promptsUsed >= maxPromptsPerChat
 
   function mergeFiles(files) {
     const nextFiles = Array.from(files || [])
@@ -64,31 +76,55 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [messages, isSending])
 
+  // Load persisted history + documents whenever the active chat changes. Workbench is
+  // keyed by chatId in AppShell, so each chat mounts fresh - no stale-state clearing here.
   useEffect(() => {
+    if (!chatId) {
+      return undefined
+    }
+
     let isMounted = true
 
-    getApiJson('/documents')
+    getChat(chatId)
+      .then((chat) => {
+        if (!isMounted) {
+          return
+        }
+        setMessages(
+          (chat.messages || []).map((item, index) => ({
+            id: `${item.role}-${item.created_at || index}-${index}`,
+            role: item.role,
+            content: item.content,
+            reasoning: item.reasoning,
+            citations: item.citations,
+          })),
+        )
+      })
+      .catch(() => {
+        if (isMounted) {
+          setMessages([])
+        }
+      })
+
+    getApiJson(`/documents?chat_id=${encodeURIComponent(chatId)}`)
       .then((response) => {
         if (!isMounted) {
           return
         }
-
         setDocuments(response.documents || [])
         setTotalChunks(response.total_chunks || 0)
       })
       .catch(() => {
-        if (!isMounted) {
-          return
+        if (isMounted) {
+          setDocuments([])
+          setTotalChunks(0)
         }
-
-        setDocuments([])
-        setTotalChunks(0)
       })
 
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [chatId])
 
   useEffect(() => {
     if (!isSending) {
@@ -114,7 +150,7 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
   ]
 
   async function uploadDocuments() {
-    if (!selectedFiles.length || isUploading) {
+    if (!selectedFiles.length || isUploading || !chatId) {
       return
     }
 
@@ -124,7 +160,7 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
       return
     }
     const formData = new FormData()
-    formData.append('chat_id', 'default')
+    formData.append('chat_id', chatId)
     filesToUpload.forEach((file) => formData.append('files', file))
 
     setIsUploading(true)
@@ -145,7 +181,7 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
   }
 
   async function clearDocuments() {
-    if (!documents.length && !totalChunks) {
+    if ((!documents.length && !totalChunks) || !chatId) {
       return
     }
 
@@ -153,7 +189,7 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
     setUploadError('')
 
     try {
-      const response = await postApiJson('/documents/clear', { chat_id: 'default' })
+      const response = await postApiJson('/documents/clear', { chat_id: chatId })
       setDocuments(response.documents || [])
       setTotalChunks(response.total_chunks || 0)
     } catch (error) {
@@ -166,10 +202,11 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
   async function sendMessage() {
     const message = query.trim()
 
-    if (!message || isSending) {
+    if (!message || isSending || !chatId || promptLimitReached) {
       return
     }
 
+    const isFirstMessage = messages.length === 0
     const userMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -187,15 +224,12 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
     try {
       const response = await postApiJson('/chat', {
         message,
-        chat_id: 'default',
+        chat_id: chatId,
         use_retrieval: true,
         messages: conversationMessages
           .filter((item) => item.role === 'user' || item.role === 'assistant')
           .slice(-10)
-          .map((item) => ({
-            role: item.role,
-            content: item.content,
-          })),
+          .map((item) => ({ role: item.role, content: item.content })),
         provider: activeProvider,
         model: deterministicMode ? null : activeModel,
         rag_version: selectedRagVersion,
@@ -212,15 +246,26 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
           meta: `${response.latency_ms}ms`,
         },
       ])
+
+      // Give the chat a real title from its first prompt, then refresh the list.
+      if (isFirstMessage) {
+        const title = message.slice(0, 48)
+        try {
+          await renameChat(chatId, title)
+        } catch {
+          /* non-fatal */
+        }
+      }
+      onChatMutated?.()
     } catch (error) {
-      const message = error.message || 'Chat request failed'
-      setChatError(message)
+      const errorText = error.message || 'Chat request failed'
+      setChatError(errorText)
       setMessages((current) => [
         ...current,
         {
           id: `assistant-error-${Date.now()}`,
           role: 'assistant',
-          content: message,
+          content: errorText,
           meta: 'error',
         },
       ])
@@ -257,6 +302,27 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
     mergeFiles(event.dataTransfer?.files)
   }
 
+  if (!chatId) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="max-w-md rounded-md border border-zinc-800 bg-zinc-900/60 p-8 text-center">
+          <h3 className="text-lg font-semibold text-white">No chat selected</h3>
+          <p className="mt-2 text-sm leading-6 text-zinc-400">
+            Create a chat to upload documents and ask grounded questions. Each chat keeps its own
+            documents and conversation history.
+          </p>
+          <button
+            type="button"
+            onClick={onNewChat}
+            className="mt-5 inline-flex rounded-md bg-[color:var(--theme-accent)] px-4 py-2 text-sm font-semibold text-zinc-950 hover:brightness-110"
+          >
+            New chat
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
       <section className="flex h-[calc(100vh-132px)] min-h-[620px] flex-col rounded-md border border-zinc-800 bg-zinc-900/60">
@@ -265,7 +331,7 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
             <div>
               <h3 className="text-lg font-semibold text-white">Chat</h3>
               <p className="mt-1 text-sm text-zinc-400">
-                {activeRagVersion.label} / {providerLabel} / {bootstrap.error ? 'Backend offline' : bootstrap.loading ? 'Checking backend' : 'Backend connected'}
+                {activeRagVersion.label} / {providerLabel} / {promptsUsed}/{maxPromptsPerChat} prompts
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -300,7 +366,8 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
               <h3 className="text-base font-semibold text-white">Start a grounded query</h3>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
                 Ask questions over the uploaded documents. Retrieval context, citations, and
-                extraction mode details appear with assistant responses.
+                extraction mode details appear with assistant responses. This chat remembers the
+                conversation.
               </p>
             </div>
           )}
@@ -335,6 +402,11 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
               {chatError}
             </div>
           )}
+          {promptLimitReached && (
+            <div className="mb-3 rounded-md border border-amber-900/60 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
+              Prompt limit reached for this chat ({maxPromptsPerChat}). Start a new chat to continue.
+            </div>
+          )}
           <div className="flex flex-col gap-3 rounded-md border border-zinc-800 bg-zinc-950 p-3 md:flex-row md:items-end">
             <label className="flex-1">
               <span className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
@@ -345,14 +417,15 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={handleKeyDown}
                 rows="3"
-                className="mt-2 w-full resize-none rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[color:var(--theme-accent)]"
-                placeholder="Ask the backend chat service..."
+                disabled={promptLimitReached}
+                className="mt-2 w-full resize-none rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-[color:var(--theme-accent)] disabled:cursor-not-allowed disabled:text-zinc-600"
+                placeholder={promptLimitReached ? 'Prompt limit reached for this chat' : 'Ask the backend chat service...'}
               />
             </label>
             <button
               type="button"
               onClick={sendMessage}
-              disabled={isSending || !query.trim()}
+              disabled={isSending || !query.trim() || promptLimitReached}
               className="h-10 rounded-md bg-[color:var(--theme-accent)] px-4 text-sm font-semibold text-zinc-950 hover:brightness-110 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
             >
               {isSending ? 'Sending' : 'Ask'}
@@ -489,7 +562,6 @@ function Workbench({ activeRagVersion, bootstrap, selectedRagVersion }) {
             </div>
           </div>
         </Panel>
-
       </aside>
     </div>
   )

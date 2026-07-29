@@ -25,8 +25,6 @@
     "max_upload_mb": 20,
     "max_docs_per_chat": 20,
     "max_chunks_per_chat": 5000,
-    "free_chats_per_user": 2,
-    "max_chats_per_user": 5,
     "max_context_tokens": 4096,
     "max_generation_tokens": 512,
     "max_top_k": 20
@@ -34,8 +32,6 @@
   "billing": {
     "enabled": true,
     "provider": "razorpay",
-    "free_chat_limit": 2,
-    "paid_chat_limit": 5,
     "currency": "INR"
   },
   "storage": {

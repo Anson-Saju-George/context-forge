@@ -8,6 +8,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
@@ -23,13 +24,23 @@ if str(BACKEND_DIR) not in sys.path:
 from config import generation_config, resolve_capabilities, settings
 from auth import auth_enabled, create_session, is_admin_email, local_user, payment_enabled, require_entitled_user, require_user, scoped_chat_id, verify_google_credential, verify_session_token
 from db import (
+  append_message,
+  count_user_chats,
+  count_user_prompts,
+  create_chat,
+  delete_chat,
   ensure_user_entitlement,
   extend_user_entitlement,
+  get_chat,
+  get_messages,
   get_user_usage,
   increment_ingest_usage,
   increment_query_usage,
   init_db,
+  list_chats,
+  purge_expired_chats,
   record_payment_attempt,
+  rename_chat,
 )
 from pipeline.generation import (
   deterministic_extraction_answer,
@@ -42,16 +53,19 @@ from pipeline.generation import (
 )
 from pipeline.ingestion import SUPPORTED_SUFFIXES, build_chunk_records, extract_text_segments, sanitize_filename
 from models import (
+  ChatMessage,
   ChatRequest,
   ChatResponse,
   ClearDocumentsRequest,
   AuthResponse,
   AuthUser,
+  CreateChatRequest,
   GoogleAuthRequest,
   IngestedDocument,
   IngestResponse,
   PaymentOrderResponse,
   PaymentVerifyRequest,
+  RenameChatRequest,
   RetrievalResult,
   RetrieveRequest,
   RetrieveResponse,
@@ -144,6 +158,34 @@ app.add_middleware(
 )
 
 api = app_settings["api_prefix"]
+
+
+_purge_lock = threading.Lock()
+_last_purge_at = 0.0
+_PURGE_INTERVAL_SECONDS = 3600
+
+
+def maybe_purge_expired_chats(force: bool = False) -> None:
+  """Delete chats inactive beyond the retention window, plus their on-disk docs.
+
+  Self-throttled to at most once per hour so it can be called opportunistically
+  from request handlers without needing a cron/background service.
+  """
+  global _last_purge_at
+  now = time.time()
+  with _purge_lock:
+    if not force and (now - _last_purge_at) < _PURGE_INTERVAL_SECONDS:
+      return
+    _last_purge_at = now
+  try:
+    storage_ids = purge_expired_chats(app_settings["chat_retention_days"])
+  except Exception:
+    return
+  for storage_id in storage_ids:
+    shutil.rmtree(chat_dir(storage_id), ignore_errors=True)
+
+
+maybe_purge_expired_chats(force=True)
 
 
 def require_vram_capacity() -> None:
@@ -482,6 +524,61 @@ def retrieve(request: RetrieveRequest, user: dict = Depends(require_entitled_use
   )
 
 
+@app.get(f"{api}/chats")
+def get_chats(user: dict = Depends(require_entitled_user)) -> dict:
+  maybe_purge_expired_chats()
+  return {
+    "chats": list_chats(user["sub"]),
+    "max_chats_per_user": app_settings["max_chats_per_user"],
+    "max_prompts_per_chat": app_settings["max_prompts_per_chat"],
+    "is_admin": bool(user.get("is_admin")),
+  }
+
+
+@app.post(f"{api}/chats")
+def create_user_chat(request: CreateChatRequest, user: dict = Depends(require_entitled_user)) -> dict:
+  if not user.get("is_admin") and count_user_chats(user["sub"]) >= app_settings["max_chats_per_user"]:
+    raise HTTPException(
+      status_code=409,
+      detail=f"Chat limit reached ({app_settings['max_chats_per_user']}). Delete a chat to start a new one.",
+    )
+  chat_id = uuid.uuid4().hex
+  storage_id = scoped_chat_id(chat_id, user)
+  title = (request.title or "New chat").strip()[:80] or "New chat"
+  return create_chat(chat_id, user["sub"], storage_id, title)
+
+
+@app.get(f"{api}/chats/{{chat_id}}")
+def get_user_chat(chat_id: str, user: dict = Depends(require_entitled_user)) -> dict:
+  chat = get_chat(chat_id, user["sub"])
+  if not chat:
+    raise HTTPException(status_code=404, detail="Chat not found.")
+  return {
+    "id": chat["id"],
+    "title": chat["title"],
+    "messages": get_messages(chat_id),
+  }
+
+
+@app.post(f"{api}/chats/{{chat_id}}/rename")
+def rename_user_chat(chat_id: str, request: RenameChatRequest, user: dict = Depends(require_entitled_user)) -> dict:
+  chat = get_chat(chat_id, user["sub"])
+  if not chat:
+    raise HTTPException(status_code=404, detail="Chat not found.")
+  title = (request.title or "New chat").strip()[:80] or "New chat"
+  rename_chat(chat_id, user["sub"], title)
+  return {"id": chat_id, "title": title}
+
+
+@app.delete(f"{api}/chats/{{chat_id}}")
+def delete_user_chat(chat_id: str, user: dict = Depends(require_entitled_user)) -> dict:
+  storage_id = delete_chat(chat_id, user["sub"])
+  if storage_id is None:
+    raise HTTPException(status_code=404, detail="Chat not found.")
+  shutil.rmtree(chat_dir(storage_id), ignore_errors=True)
+  return {"deleted": chat_id}
+
+
 @app.post(f"{api}/chat", response_model=ChatResponse)
 def chat(request: ChatRequest, user: dict | None = Depends(require_entitled_user)) -> ChatResponse:
   start = time.perf_counter()
@@ -502,6 +599,23 @@ def chat(request: ChatRequest, user: dict | None = Depends(require_entitled_user
   total_chunks = 0
   retrieval_latency_ms = 0
   chat_id = scoped_chat_id(request.chat_id, user)
+
+  # If this chat_id is a real, owned chat, persist to it and drive history from the
+  # DB (the source of truth). Otherwise fall back to the client-supplied messages
+  # (ephemeral "default" corpus / unauthenticated flows) without persisting.
+  persist_chat = None
+  history_messages = request.messages
+  if isinstance(user, dict) and user.get("sub"):
+    owned_chat = get_chat(request.chat_id, user["sub"])
+    if owned_chat:
+      persist_chat = request.chat_id
+      if not user.get("is_admin") and count_user_prompts(persist_chat) >= app_settings["max_prompts_per_chat"]:
+        raise HTTPException(
+          status_code=409,
+          detail=f"Prompt limit reached for this chat ({app_settings['max_prompts_per_chat']}). Start a new chat.",
+        )
+      prior = get_messages(persist_chat, limit=app_settings["max_prompts_per_chat"] * 2)
+      history_messages = [ChatMessage(role=m["role"], content=m["content"]) for m in prior]
 
   if request.use_retrieval:
     chunks = load_json(chunks_path(chat_id), [])
@@ -546,7 +660,7 @@ def chat(request: ChatRequest, user: dict | None = Depends(require_entitled_user
       with GenerationSlot():
         reasoning_summary, answer = request_ollama(
           request.message,
-          request.messages,
+          history_messages,
           retrieval_context,
           load_json(documents_path(chat_id), []),
           model,
@@ -561,6 +675,15 @@ def chat(request: ChatRequest, user: dict | None = Depends(require_entitled_user
   latency_ms = int((time.perf_counter() - start) * 1000)
   if isinstance(user, dict) and user.get("sub"):
     increment_query_usage(user["sub"], user.get("email", ""), normalize_rag_version(request.rag_version), provider)
+  if persist_chat:
+    append_message(persist_chat, "user", request.message)
+    append_message(
+      persist_chat,
+      "assistant",
+      answer,
+      reasoning_summary,
+      [dict(result) for result in retrieval_context],
+    )
   return ChatResponse(
     answer=answer,
     provider=provider,
