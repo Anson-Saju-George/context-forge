@@ -38,7 +38,9 @@ def _wait_for_ollama(timeout_seconds: int = 60) -> None:
   image=image,
   gpu="A10G",
   volumes={MODELS_DIR: models_volume},
-  scaledown_window=300,
+  # Keep the GPU warm for 2 min after the last request. Lower = cheaper idle
+  # (~2c/sparse session vs ~9c at 300s) at the cost of more cold starts.
+  scaledown_window=120,
   # Model pre-pull in @modal.enter() can take a few minutes on a cold volume;
   # give the container long enough to finish before Modal calls it unhealthy.
   startup_timeout=600,
