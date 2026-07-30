@@ -15,7 +15,7 @@ The current implementation supports:
 - Razorpay order + payment verification when payment secrets are configured
 - SQLite user/usage tracking
 
-Detailed implementation status, endpoint inventory, config values, verified benchmark notes, and documentation audit findings are consolidated in [Project-Status.md](./Project-Status.md).
+An earlier implementation-status snapshot (endpoint inventory, config values, benchmark notes, audit findings) is archived, now outdated, at [docs/archive/Project-Status.md](./docs/archive/Project-Status.md).
 
 ## Run Contract
 
@@ -109,9 +109,6 @@ Current behavior:
 
 ## Documentation
 
-Only these active docs should be treated as current:
+[README.md](./README.md) is the current source of truth.
 
-- [README.md](./README.md)
-- [Project-Status.md](./Project-Status.md)
-
-Historical plans, baselines, benchmark notes, and generated reports are archived under [docs/archive/](./docs/archive/).
+Historical plans, baselines, benchmark notes, generated reports, and the (now outdated) implementation-status snapshot are archived under [docs/archive/](./docs/archive/).
