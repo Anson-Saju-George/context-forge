@@ -263,15 +263,20 @@ def models() -> dict:
     ollama_models = allowed_models
     ollama_available = False
 
+  base_url = ollama_base_url()
+  is_modal = "modal" in base_url.lower()
   return {
     "default_provider": generation.get("default_provider", "ollama"),
     "default_model": default_model,
     "providers": generation.get("providers", {}),
     "ollama": {
       "available": ollama_available,
-      "base_url": ollama_base_url(),
+      "base_url": base_url,
       "models": ollama_models,
       "allowed_models": allowed_models,
+      # Where inference runs, derived from OLLAMA_BASE_URL (single source).
+      "location": "modal" if is_modal else "local",
+      "location_label": "Modal" if is_modal else "Local",
     },
   }
 

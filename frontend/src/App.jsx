@@ -260,11 +260,15 @@ function App() {
     return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
   }
 
+  // When inference runs on Modal, surface "Modal" instead of the generic "online"
+  // (label comes from the backend, derived from OLLAMA_BASE_URL - single source).
+  const inferenceLocationLabel = bootstrap.models?.ollama?.location_label
+  const onlineLabel = inferenceLocationLabel === 'Modal' ? 'Modal' : 'online'
   const statusItems = [
     { label: 'Frontend', value: 'ready', tone: 'ok' },
     {
       label: 'Backend',
-      value: bootstrap.loading ? 'checking' : bootstrap.error ? 'offline' : 'online',
+      value: bootstrap.loading ? 'checking' : bootstrap.error ? 'offline' : onlineLabel,
       tone: bootstrap.loading ? 'warn' : bootstrap.error ? 'bad' : 'ok',
     },
     {
