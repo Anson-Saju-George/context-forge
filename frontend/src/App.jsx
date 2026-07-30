@@ -6,7 +6,6 @@ import {
   createChat,
   createPaymentOrder,
   deleteChat,
-  getAuthToken,
   getCurrentUser,
   listChats,
   loadBootstrapData,
@@ -63,7 +62,6 @@ function App() {
   const [showIntro, setShowIntro] = useState(true)
   const autoAdvancedRef = useRef(false)
   const [authUser, setAuthUser] = useState(null)
-  const [hasStoredSession, setHasStoredSession] = useState(() => Boolean(getAuthToken()))
   const [authLoading, setAuthLoading] = useState(true)
   const [authError, setAuthError] = useState('')
   const [now, setNow] = useState(() => Date.now())
@@ -130,8 +128,12 @@ function App() {
       && !authUser.is_admin
       && !authUser.paid,
   )
+  // Strict order on load/reload: loading spinner → overlay (story/login/payment) →
+  // workbench. The three are mutually exclusive so the main app never flashes before
+  // the overlay. The workbench only renders once auth has resolved AND the story
+  // overlay has been dismissed.
   const shouldShowOverlay = !authLoading && (!authUser || showIntro || paymentRequired)
-  const shouldShowAppShell = (authLoading && hasStoredSession) || (!authLoading && Boolean(authUser) && !paymentRequired)
+  const shouldShowAppShell = !authLoading && Boolean(authUser) && !paymentRequired && !showIntro
 
   // Once per load: a logged-in, entitled user sees the story overlay for 2s, then
   // it auto-advances to the workbench. Manual re-opens of the story (via the Story
@@ -306,7 +308,6 @@ function App() {
     try {
       const user = await loginWithGoogleCredential(credential)
       setAuthUser(user)
-      setHasStoredSession(true)
       // Show the story overlay after sign-in; entitled users auto-advance via the
       // 2s timer, payment-required users stay on the overlay.
       autoAdvancedRef.current = false
@@ -320,7 +321,6 @@ function App() {
   function handleLogout() {
     logout()
     setAuthUser(null)
-    setHasStoredSession(false)
     setAuthError('')
     setShowIntro(true)
   }
@@ -368,7 +368,6 @@ function App() {
           try {
             const user = await verifyPayment(response)
             setAuthUser(user)
-            setHasStoredSession(true)
             autoAdvancedRef.current = true
             setShowIntro(false)
           } catch (error) {
@@ -415,7 +414,7 @@ function App() {
 
   return (
     <main className={`min-h-screen bg-zinc-950 text-zinc-100 ${activeRagVersion.theme}`}>
-      {authLoading && !hasStoredSession ? (
+      {authLoading ? (
         <div className="flex min-h-screen items-center justify-center bg-zinc-950">
           <div className="rounded-md border border-zinc-800 bg-zinc-900/70 px-4 py-3 text-sm text-zinc-400">
             Loading session...
