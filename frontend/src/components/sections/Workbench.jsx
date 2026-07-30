@@ -16,14 +16,15 @@ function Workbench({
   const apiCapabilities = bootstrap.capabilities
   const maxUploadFiles = Number(apiCapabilities?.scheduler?.max_upload_files || 5)
   const defaultModel = apiCapabilities?.generation?.default_model || 'qwen3:4b-instruct'
+  // Single source: the /models endpoint already returns exactly the models that are
+  // installed AND allowlisted on the ACTIVE backend. Offer only those - never a model
+  // the backend can't actually run.
   const availableModels = bootstrap.models?.ollama?.models ?? []
-  const allowedModels = bootstrap.models?.ollama?.allowed_models ?? []
-  const visibleModels = allowedModels.length ? availableModels.filter((model) => allowedModels.includes(model)) : availableModels
-  const modelOptions = [defaultModel, ...visibleModels].filter(
-    (model, index, models) => model && models.indexOf(model) === index,
-  )
+  const modelOptions = availableModels.length ? availableModels : [defaultModel]
   const [selectedModel, setSelectedModel] = useState('')
-  const activeModel = selectedModel || modelOptions[0] || defaultModel
+  // Fall back to an available model if a previously-selected one is no longer offered
+  // (e.g. after switching the backend to Modal, which serves a different set).
+  const activeModel = modelOptions.includes(selectedModel) ? selectedModel : (modelOptions[0] || defaultModel)
   const [deterministicMode, setDeterministicMode] = useState(false)
   const activeProvider = deterministicMode ? 'auto' : 'ollama'
   const providerLabel = deterministicMode ? 'deterministic' : 'ollama'

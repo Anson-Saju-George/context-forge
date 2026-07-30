@@ -3,6 +3,7 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import modal
 
@@ -14,12 +15,34 @@ models_volume = modal.Volume.from_name("context-forge-ollama-models", create_if_
 
 MODELS_DIR = "/ollama-models"
 OLLAMA_PORT = 11434
-DEFAULT_MODEL = os.getenv("MODAL_OLLAMA_MODEL", "qwen3:4b-instruct")
+
+
+def _deploy_time_allowlist() -> list[str]:
+  """Runs LOCALLY at `modal deploy` time. The models Modal serves are driven by the
+  SAME single source the app uses - OLLAMA_MODEL_ALLOWLIST - read from the shell env
+  or the repo-root .env, so Modal pulls exactly the models the app offers."""
+  raw = os.getenv("OLLAMA_MODEL_ALLOWLIST", "").strip()
+  if not raw:
+    env_path = Path(__file__).resolve().parents[1] / ".env"
+    if env_path.exists():
+      for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("OLLAMA_MODEL_ALLOWLIST=") and not stripped.startswith("#"):
+          raw = stripped.split("=", 1)[1].strip()
+          break
+  models = [m.strip() for m in raw.split(",") if m.strip()]
+  return models or ["qwen3:4b-instruct"]
+
+
+PULL_MODELS = _deploy_time_allowlist()
 
 image = (
   modal.Image.from_registry("nvidia/cuda:12.9.0-devel-ubuntu22.04", add_python="3.12")
   .apt_install("curl", "zstd")
   .run_commands("curl -fsSL https://ollama.com/install.sh | sh")
+  # Bake the allowlist into the image at deploy time so the container pulls the same
+  # set the app offers (single source: OLLAMA_MODEL_ALLOWLIST).
+  .env({"OLLAMA_PULL_MODELS": ",".join(PULL_MODELS)})
 )
 
 
@@ -41,9 +64,9 @@ def _wait_for_ollama(timeout_seconds: int = 60) -> None:
   # Keep the GPU warm for 2 min after the last request. Lower = cheaper idle
   # (~2c/sparse session vs ~9c at 300s) at the cost of more cold starts.
   scaledown_window=120,
-  # Model pre-pull in @modal.enter() can take a few minutes on a cold volume;
-  # give the container long enough to finish before Modal calls it unhealthy.
-  startup_timeout=600,
+  # First cold start pulls every allowlisted model into the Volume (multi-GB); give
+  # it plenty of headroom. Subsequent cold starts find them cached and start fast.
+  startup_timeout=1800,
   port=OLLAMA_PORT,
   # unauthenticated defaults to False: Modal requires Modal-Key/Modal-Secret proxy
   # auth headers on every request. Do not set this to True - that would expose a
@@ -58,8 +81,12 @@ class OllamaServer:
     os.environ["OLLAMA_HOST"] = f"0.0.0.0:{OLLAMA_PORT}"
     subprocess.Popen(["ollama", "serve"])
     _wait_for_ollama()
-    # Pre-pull so the first real chat request doesn't also pay for the download.
-    subprocess.run(["ollama", "pull", DEFAULT_MODEL], check=True)
+    # Pre-pull every allowlisted model (idempotent - cached in the Volume) so the app
+    # only ever offers models that are actually installed here.
+    models = [m.strip() for m in os.getenv("OLLAMA_PULL_MODELS", "qwen3:4b-instruct").split(",") if m.strip()]
+    for model in models:
+      print(f"[startup] ensuring model present: {model}")
+      subprocess.run(["ollama", "pull", model], check=True)
     models_volume.commit()
 
 
