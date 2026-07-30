@@ -415,13 +415,12 @@ function App() {
   return (
     <main className={`min-h-screen bg-zinc-950 text-zinc-100 ${activeRagVersion.theme}`}>
       {authLoading ? (
-        <div className="flex min-h-screen items-center justify-center bg-zinc-950">
-          <div className="rounded-md border border-zinc-800 bg-zinc-900/70 px-4 py-3 text-sm text-zinc-400">
-            Loading session...
-          </div>
+        <div className="cf-fade-in flex min-h-screen items-center justify-center bg-zinc-950">
+          <div className="cf-loading-track" role="status" aria-label="Loading" />
         </div>
       ) : null}
       {shouldShowOverlay && (
+        <div className="cf-fade-in">
         <Overlay
           activeVersion={activeRagVersion}
           authError={authError}
@@ -439,8 +438,10 @@ function App() {
           onVersionChange={setSelectedRagVersion}
           versions={ragVersions}
         />
+        </div>
       )}
       {shouldShowAppShell && (
+        <div className="cf-fade-in">
         <AppShell
           view={view}
           onViewChange={setView}
@@ -462,6 +463,7 @@ function App() {
           onShowIntro={() => setShowIntro(true)}
           statusItems={statusItems}
         />
+        </div>
       )}
     </main>
   )
